@@ -19,6 +19,7 @@ export interface Job {
   priority: Priority;
   status: Status;
   order: number;
+  notes?: string;
 }
 
 export interface Editor {
@@ -36,6 +37,7 @@ export const usePlannerData = () => {
 
   const [editors, setEditors] = useState<Editor[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [planType, setPlanType] = useState<'free' | 'pro'>('free'); // Default to free
   const currentWeekStartStr = format(currentWeekStart, 'yyyy-MM-dd');
 
   // Fetch Data
@@ -43,12 +45,25 @@ export const usePlannerData = () => {
     if (!user) {
       setEditors([]);
       setJobs([]);
+      setPlanType('free');
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
+
+      // Fetch Profile Plan
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('plan_type')
+        .eq('id', user.id)
+        .single();
+
+      if (profileData) {
+        setPlanType(profileData.plan_type as 'free' | 'pro');
+      }
+
       // Fetch Editors
       const { data: editorsData, error: editorsError } = await supabase
         .from('editors')
@@ -64,55 +79,147 @@ export const usePlannerData = () => {
       }));
       setEditors(formattedEditors);
 
-      // Fetch Jobs
+      // Parallel Fetch Strategy
+      // 1. Fetch ALL jobs
       const { data: jobsData, error: jobsError } = await supabase
-        .from('jobs')
-        .select('*')
-        .eq('week_start', currentWeekStartStr) // Optimization: only fetch current week? 
-      // Wait, the original code had "getJobsForMonth" which implies we need more than current week.
-      // But filtering locally is easier if dataset is small. 
-      // For scalability, we should fetch by range, but existing app loads all.
-      // Let's fetch ALL jobs for now to maintain identical behavior to previous "local storage" version
-      // or at least fetch relevant ones. 
-      // Ideally we fetch all jobs to support month view without refetching.
-
-      // Actually, let's just fetch all jobs for now.
-      const { data: allJobsData, error: allJobsError } = await supabase
         .from('jobs')
         .select('*');
 
-      if (allJobsError) throw allJobsError;
+      if (jobsError) throw jobsError;
 
-      const formattedJobs: Job[] = allJobsData.map((j: any) => ({
+      // 2. Fetch ALL notes for these jobs (if table exists)
+      let notesMap: Record<string, string> = {};
+      try {
+        const { data: notesData, error: notesError } = await supabase
+          .from('job_notes')
+          .select('job_id, content');
+
+        if (!notesError && notesData) {
+          notesData.forEach((n: any) => {
+            notesMap[n.job_id] = n.content;
+          });
+        }
+      } catch (e) {
+        console.warn("Could not fetch from job_notes table", e);
+      }
+
+      // 3. Merge data
+      const formattedJobs: Job[] = jobsData.map((j: any) => ({
         id: j.id,
         title: j.title,
         clientName: j.client_name,
         editorId: j.editor_id,
         scheduledDate: j.scheduled_date,
-        weekStart: j.week_start, // Ensure this matches string format YYYY-MM-DD
+        weekStart: j.week_start,
         estimatedHours: j.estimated_hours,
         priority: j.priority,
         status: j.status,
         order: j.order,
+        // Priority: Separate Table Note -> Column Note -> Empty
+        notes: notesMap[j.id] || j.notes || '',
       }));
-      setJobs(formattedJobs);
 
+      setJobs(formattedJobs);
     } catch (error: any) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load planner data');
     } finally {
       setLoading(false);
     }
-  }, [user, currentWeekStartStr]); // Only re-fetch if week changes? No, if we fetch ALL jobs, we don't need to refetch on week change. 
-  // But wait, if we decide to fetch only current week, we do.
-  // Let's stick to fetching ALL jobs for simplicity and consistency with Month view requirements.
-  // So remove currentWeekStartStr from dependency if fetching all.
+  }, [user, currentWeekStartStr]);
+
+  // AI Optimization Logic
+  const optimizeWeekSchedule = useCallback(async () => {
+    if (planType !== 'pro' || editors.length < 2) return;
+
+    const updates: { id: string; editor_id: string }[] = [];
+    const newJobs = [...jobs];
+    let movesCount = 0;
+
+    // Process each day of the week independently
+    for (let day = 0; day < 7; day++) {
+      // 1. Get jobs for this day
+      const dayJobs = newJobs.filter(j => j.scheduledDate === day && j.weekStart === currentWeekStartStr);
+      if (dayJobs.length === 0) continue;
+
+      // 2. Calculate Load per Editor
+      const editorLoads: Record<string, number> = {};
+      editors.forEach(e => editorLoads[e.id] = 0);
+
+      dayJobs.forEach(j => {
+        if (editorLoads[j.editorId] !== undefined) {
+          editorLoads[j.editorId] += j.estimatedHours;
+        }
+      });
+
+      // 3. Determine imbalances
+      const totalHours = Object.values(editorLoads).reduce((a, b) => a + b, 0);
+      const avgHours = totalHours / editors.length;
+      const threshold = 1.0; // Don't move if difference is small (1 hour)
+
+      // 4. Greedy Balancing
+      // Sort editors by load
+      let sortedEditors = [...editors].sort((a, b) => editorLoads[b.id] - editorLoads[a.id]); // Descending
+
+      let maxIter = 20; // Safety break
+      while (maxIter-- > 0) {
+        sortedEditors.sort((a, b) => editorLoads[b.id] - editorLoads[a.id]);
+        const overloaded = sortedEditors[0];
+        const underloaded = sortedEditors[sortedEditors.length - 1];
+
+        if ((editorLoads[overloaded.id] - editorLoads[underloaded.id]) <= threshold) {
+          break; // Balanced enough
+        }
+
+        // Find a suitable job to move
+        // Logic: Find the smallest job from Overloaded that fits into Underloaded without making Underloaded > Average + Threshold
+        // Or just simply move the smallest job if it helps convergence
+        const candidates = dayJobs.filter(j => j.editorId === overloaded.id).sort((a, b) => a.estimatedHours - b.estimatedHours);
+
+        let moved = false;
+        for (const job of candidates) {
+          // Check if moving this job flips the balance too aggressively?
+          // Actually, as long as (NewUnderload < OldOverload) it is an improvement usually.
+          // Simple heuristic: If (Underload + Job) < Overload, do it. 
+          if ((editorLoads[underloaded.id] + job.estimatedHours) < editorLoads[overloaded.id]) {
+            // Move Job
+            job.editorId = underloaded.id;
+            editorLoads[overloaded.id] -= job.estimatedHours;
+            editorLoads[underloaded.id] += job.estimatedHours;
+
+            updates.push({ id: job.id, editor_id: underloaded.id });
+            movesCount++;
+            moved = true;
+            break; // Re-sort and re-evaluate
+          }
+        }
+
+        if (!moved) break; // No valid moves found
+      }
+    }
+
+    if (movesCount > 0) {
+      // Optimistic Update
+      setJobs(newJobs);
+      toast.info(`AI Optimization: Rebalanced ${movesCount} tasks across the team.`);
+
+      // Persist to DB
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('jobs')
+          .update({ editor_id: update.editor_id })
+          .eq('id', update.id);
+        if (error) console.error("Failed to save optimization move", error);
+      }
+    } else {
+      toast.info("Schedule is already balanced!");
+    }
+
+  }, [jobs, editors, currentWeekStartStr, planType]);
 
   useEffect(() => {
     fetchData();
-  }, [user]); // Fetch once on user load. 
-
-  // Manual refreshes could be useful but let's rely on mutations updating local state optimistically or refetching.
+  }, [user]);
 
   // Week navigation
   const goToPreviousWeek = useCallback(() => {
@@ -166,28 +273,47 @@ export const usePlannerData = () => {
         estimated_hours: job.estimatedHours,
         priority: job.priority,
         status: job.status,
-        order: newJobOrder
+        order: newJobOrder,
       };
 
-      const { data, error } = await supabase
+      const { data: jobData, error: jobError } = await supabase
         .from('jobs')
         .insert(dbJob)
         .select()
         .single();
 
-      if (error) throw error;
+      if (jobError) throw jobError;
+
+      // Try adding note to table
+      if (job.notes) {
+        try {
+          const { error: noteError } = await supabase
+            .from('job_notes')
+            .insert({
+              job_id: jobData.id,
+              user_id: user.id,
+              content: job.notes
+            });
+          if (noteError) throw noteError;
+        } catch (noteErr) {
+          console.warn("Note table save failed, trying column fallback...", noteErr);
+          // Fallback to updating column if table save failed
+          await supabase.from('jobs').update({ notes: job.notes }).eq('id', jobData.id);
+        }
+      }
 
       const newJob: Job = {
-        id: data.id,
-        title: data.title,
-        clientName: data.client_name,
-        editorId: data.editor_id,
-        scheduledDate: data.scheduled_date,
-        weekStart: data.week_start,
-        estimatedHours: data.estimated_hours,
-        priority: data.priority,
-        status: data.status,
-        order: data.order,
+        id: jobData.id,
+        title: jobData.title,
+        clientName: jobData.client_name,
+        editorId: jobData.editor_id,
+        scheduledDate: jobData.scheduled_date,
+        weekStart: jobData.week_start,
+        estimatedHours: jobData.estimated_hours,
+        priority: jobData.priority,
+        status: jobData.status,
+        order: jobData.order,
+        notes: job.notes || ''
       };
 
       setJobs(prev => [...prev, newJob]);
@@ -195,7 +321,7 @@ export const usePlannerData = () => {
       return newJob;
     } catch (error: any) {
       console.error('Error adding job:', error);
-      toast.error('Failed to create job');
+      toast.error(`Failed to create job: ${error.message || 'Unknown error'}`);
     }
   }, [jobs, currentWeekStartStr, user]);
 
@@ -217,28 +343,70 @@ export const usePlannerData = () => {
       if (updates.order !== undefined) dbUpdates.order = updates.order;
       if (updates.weekStart) dbUpdates.week_start = updates.weekStart;
 
-      const { error } = await supabase
-        .from('jobs')
-        .update(dbUpdates)
-        .eq('id', jobId);
+      if (Object.keys(dbUpdates).length > 0) {
+        const { error } = await supabase
+          .from('jobs')
+          .update(dbUpdates)
+          .eq('id', jobId);
+        if (error) throw error;
+      }
 
-      if (error) throw error;
-    } catch (error) {
+      // Handle Note Updates
+      if (updates.notes !== undefined) {
+        try {
+          const { data: existingNote } = await supabase
+            .from('job_notes')
+            .select('id')
+            .eq('job_id', jobId)
+            .single();
+
+          if (existingNote) {
+            await supabase
+              .from('job_notes')
+              .update({ content: updates.notes, updated_at: new Date().toISOString() })
+              .eq('job_id', jobId);
+          } else {
+            const { error: insertError } = await supabase
+              .from('job_notes')
+              .insert({
+                job_id: jobId,
+                user_id: user?.id,
+                content: updates.notes
+              });
+            if (insertError) throw insertError;
+          }
+        } catch (noteErr) {
+          console.warn("Note table update failed, trying column fallback...", noteErr);
+          // Fallback to column
+          const { error: colError } = await supabase
+            .from('jobs')
+            .update({ notes: updates.notes })
+            .eq('id', jobId);
+
+          if (colError) {
+            console.error("Column fallback also failed", colError);
+            toast.error("Failed to save note. Please run the provided SQL migration script.");
+          }
+        }
+      }
+
+    } catch (error: any) {
       console.error('Error updating job:', error);
-      toast.error('Failed to update job');
+      toast.error(`Failed to update job: ${error.message || 'Unknown error'}`);
       fetchData(); // Revert on error
     }
-  }, [fetchData]);
+  }, [fetchData, user]);
 
   const deleteJob = useCallback(async (jobId: string) => {
     try {
       setJobs(prev => prev.filter(job => job.id !== jobId));
+      // Cascade delete handles notes, just delete job
       const { error } = await supabase.from('jobs').delete().eq('id', jobId);
       if (error) throw error;
       toast.success('Job deleted');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting job:', error);
-      toast.error('Failed to delete job');
+      toast.error(`Failed to delete job: ${error.message || 'Unknown error'}`);
       fetchData();
     }
   }, [fetchData]);
@@ -463,5 +631,7 @@ export const usePlannerData = () => {
     getEditorCapacity,
     getJobsForMonth,
     getJobCountForDate,
+    planType,
+    optimizeWeekSchedule,
   };
 };

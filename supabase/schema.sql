@@ -29,6 +29,7 @@ create table public.jobs (
   priority text default 'medium',
   status text default 'queued',
   "order" integer default 0,
+  notes text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

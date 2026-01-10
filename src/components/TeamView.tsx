@@ -16,6 +16,8 @@ interface TeamViewProps {
   onUpdateEditor: (editorId: string, updates: Partial<Editor>) => void;
   onDeleteEditor: (editorId: string) => void;
   onReassignJobs: (fromEditorId: string, toEditorId: string) => void;
+  planType: 'free' | 'pro';
+  onUpgrade: () => void;
 }
 
 const TeamView = ({
@@ -26,13 +28,15 @@ const TeamView = ({
   onUpdateEditor,
   onDeleteEditor,
   onReassignJobs,
+  planType,
+  onUpgrade,
 }: TeamViewProps) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedEditor, setSelectedEditor] = useState<Editor | null>(null);
   const [reassignToEditorId, setReassignToEditorId] = useState('');
-  
+
   // Form state
   const [name, setName] = useState('');
   const [weeklyCapacity, setWeeklyCapacity] = useState('40');
@@ -57,11 +61,11 @@ const TeamView = ({
   const handleDeleteConfirm = () => {
     if (!selectedEditor) return;
     const jobCount = getEditorJobCount(selectedEditor.id);
-    
+
     if (jobCount > 0 && reassignToEditorId) {
       onReassignJobs(selectedEditor.id, reassignToEditorId);
     }
-    
+
     onDeleteEditor(selectedEditor.id);
     setIsDeleteModalOpen(false);
     setSelectedEditor(null);
@@ -95,10 +99,14 @@ const TeamView = ({
           <h2 className="text-sm font-semibold text-foreground">Team Management</h2>
           <p className="text-[11px] text-muted-foreground">{editors.length} editors</p>
         </div>
-        <Button 
-          size="sm" 
+        <Button
+          size="sm"
           className="h-8 gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
           onClick={() => {
+            if (planType === 'free' && editors.length >= 2) {
+              onUpgrade();
+              return;
+            }
             setName('');
             setWeeklyCapacity('40');
             setIsAddModalOpen(true);
@@ -114,7 +122,7 @@ const TeamView = ({
         {editors.map((editor) => {
           const capacity = getEditorCapacity(editor.id);
           const jobCount = getEditorJobCount(editor.id);
-          
+
           return (
             <div key={editor.id} className="px-4 py-3 flex items-center gap-4 hover:bg-secondary/20 transition-colors">
               {/* Avatar */}
@@ -142,7 +150,7 @@ const TeamView = ({
                   <span>{capacity}%</span>
                 </div>
                 <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className={cn('h-full rounded-full transition-all', getCapacityColor(capacity))}
                     style={{ width: `${Math.min(capacity, 100)}%` }}
                   />
@@ -289,8 +297,8 @@ const TeamView = ({
               <Button type="button" variant="outline" onClick={() => setIsDeleteModalOpen(false)} className="h-9">
                 Cancel
               </Button>
-              <Button 
-                type="button" 
+              <Button
+                type="button"
                 variant="destructive"
                 onClick={handleDeleteConfirm}
                 disabled={selectedEditor ? getEditorJobCount(selectedEditor.id) > 0 && !reassignToEditorId : true}

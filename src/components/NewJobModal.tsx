@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Editor, Priority, Status } from '@/hooks/usePlannerData';
 
 interface NewJobModalProps {
@@ -18,6 +19,7 @@ interface NewJobModalProps {
     estimatedHours: number;
     priority: Priority;
     status: Status;
+    notes?: string;
   }) => void;
 }
 
@@ -39,10 +41,11 @@ const NewJobModal = ({ isOpen, onClose, editors, onSubmit }: NewJobModalProps) =
   const [estimatedHours, setEstimatedHours] = useState('4');
   const [priority, setPriority] = useState<Priority>('medium');
   const [status, setStatus] = useState<Status>('queued');
+  const [notes, setNotes] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!title.trim() || !clientName.trim() || !editorId) return;
 
     onSubmit({
@@ -53,6 +56,7 @@ const NewJobModal = ({ isOpen, onClose, editors, onSubmit }: NewJobModalProps) =
       estimatedHours: parseFloat(estimatedHours) || 4,
       priority,
       status,
+      notes: notes.trim() || undefined,
     });
 
     // Reset form
@@ -63,6 +67,7 @@ const NewJobModal = ({ isOpen, onClose, editors, onSubmit }: NewJobModalProps) =
     setEstimatedHours('4');
     setPriority('medium');
     setStatus('queued');
+    setNotes('');
     onClose();
   };
 
@@ -173,6 +178,17 @@ const NewJobModal = ({ isOpen, onClose, editors, onSubmit }: NewJobModalProps) =
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notes" className="text-sm">Notes (Optional)</Label>
+            <Textarea
+              id="notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add any additional notes or details..."
+              className="text-sm min-h-[60px] resize-none"
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

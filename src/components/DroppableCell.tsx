@@ -9,9 +9,10 @@ interface DroppableCellProps {
   jobs: Job[];
   heatmapClass: string;
   onDeleteJob?: (jobId: string) => void;
+  onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
 }
 
-const DroppableCell = ({ editorId, dayIndex, jobs, heatmapClass, onDeleteJob }: DroppableCellProps) => {
+const DroppableCell = ({ editorId, dayIndex, jobs, heatmapClass, onDeleteJob, onUpdateJob }: DroppableCellProps) => {
   const droppableId = `${editorId}::${dayIndex}`;
 
   return (
@@ -38,7 +39,9 @@ const DroppableCell = ({ editorId, dayIndex, jobs, heatmapClass, onDeleteJob }: 
                 hours={job.estimatedHours}
                 priority={job.priority}
                 status={job.status}
+                notes={job.notes}
                 onDelete={onDeleteJob}
+                onUpdateJob={onUpdateJob}
               />
             ))}
             {provided.placeholder}

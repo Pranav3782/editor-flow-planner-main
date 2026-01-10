@@ -10,17 +10,18 @@ interface EditorRowDraggableProps {
   jobs: Job[];
   showHeatmap: boolean;
   onDeleteJob?: (jobId: string) => void;
+  onUpdateJob: (jobId: string, updates: Partial<Job>) => void;
 }
 
 const allDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const EditorRowDraggable = ({ id, name, capacity, jobs, showHeatmap, onDeleteJob }: EditorRowDraggableProps) => {
+const EditorRowDraggable = ({ id, name, capacity, jobs, showHeatmap, onDeleteJob, onUpdateJob }: EditorRowDraggableProps) => {
   const getHeatmapClass = (dayIndex: number) => {
     if (!showHeatmap) return '';
-    
+
     const dayJobs = jobs.filter(job => job.scheduledDate === dayIndex);
     const totalHours = dayJobs.reduce((sum, job) => sum + job.estimatedHours, 0);
-    
+
     if (totalHours === 0) return 'heatmap-open';
     if (totalHours >= 8) return 'heatmap-danger';
     if (totalHours >= 5) return 'heatmap-near';
@@ -54,6 +55,7 @@ const EditorRowDraggable = ({ id, name, capacity, jobs, showHeatmap, onDeleteJob
             jobs={dayJobs}
             heatmapClass={getHeatmapClass(dayIndex)}
             onDeleteJob={onDeleteJob}
+            onUpdateJob={onUpdateJob}
           />
         );
       })}

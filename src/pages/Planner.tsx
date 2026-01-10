@@ -24,6 +24,7 @@ import TeamView from '@/components/TeamView';
 import ThemeToggle from '@/components/ThemeToggle';
 import { usePlannerData } from '@/hooks/usePlannerData';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 type View = 'planner' | 'calendar' | 'team';
 
@@ -60,6 +61,9 @@ const Planner = () => {
     deleteEditor,
     reassignEditorJobs,
     getEditorJobCount,
+    updateJob,
+    planType,
+    optimizeWeekSchedule,
   } = usePlannerData();
 
   if (loading) {
@@ -146,20 +150,26 @@ const Planner = () => {
         </nav>
 
         {/* Upgrade CTA */}
-        <div className="p-3 border-t border-border/30">
-          <div className="p-3 rounded-lg bg-gradient-to-br from-primary/10 to-warning/10 border border-primary/20">
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles size={14} className="text-primary" />
-              <span className="text-xs font-medium text-foreground">Upgrade to Pro</span>
+        {planType !== 'pro' && (
+          <div className="p-3 border-t border-border/30">
+            <div className="p-3 rounded-lg bg-gradient-to-br from-primary/10 to-warning/10 border border-primary/20">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={14} className="text-primary" />
+                <span className="text-xs font-medium text-foreground">Upgrade to Pro</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Unlock AI scheduling & advanced analytics
+              </p>
+              <Button
+                size="sm"
+                className="w-full h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => window.location.href = '/#pricing'}
+              >
+                Upgrade
+              </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground mb-2">
-              Unlock AI scheduling & advanced analytics
-            </p>
-            <Button size="sm" className="w-full h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90">
-              Upgrade
-            </Button>
           </div>
-        </div>
+        )}
       </aside>
 
       {/* Main Content */}
@@ -228,17 +238,32 @@ const Planner = () => {
                   </div>
 
                   <Button
-                    variant="outline"
+                    variant={planType === 'pro' ? "default" : "outline"}
                     size="sm"
-                    className="gap-1.5 h-7 text-xs border-border hover:bg-secondary"
-                    onClick={() => setIsPremiumModalOpen(true)}
+                    className={cn(
+                      "gap-1.5 h-7 text-xs border-border",
+                      planType === 'pro' ? "bg-primary hover:bg-primary/90" : "hover:bg-secondary"
+                    )}
+                    onClick={() => {
+                      if (planType === 'pro') {
+                        toast.promise(optimizeWeekSchedule(), {
+                          loading: 'Optimizing schedule...',
+                          success: 'Optimization cycle complete',
+                          error: 'Failed to optimize'
+                        });
+                      } else {
+                        setIsPremiumModalOpen(true);
+                      }
+                    }}
                   >
-                    <Sparkles size={12} className="text-primary" />
+                    <Sparkles size={12} className={planType === 'pro' ? "text-primary-foreground" : "text-primary"} />
                     AI Optimize
-                    <span className="text-[9px] bg-gradient-to-r from-primary to-warning px-1 py-0.5 rounded text-primary-foreground font-medium flex items-center gap-0.5">
-                      <Lock size={8} />
-                      Pro
-                    </span>
+                    {planType !== 'pro' && (
+                      <span className="text-[9px] bg-gradient-to-r from-primary to-warning px-1 py-0.5 rounded text-primary-foreground font-medium flex items-center gap-0.5">
+                        <Lock size={8} />
+                        Pro
+                      </span>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -273,6 +298,7 @@ const Planner = () => {
                       jobs={getEditorJobs(editor.id)}
                       showHeatmap={showHeatmap}
                       onDeleteJob={deleteJob}
+                      onUpdateJob={updateJob}
                     />
                   ))}
                 </div>
@@ -313,22 +339,18 @@ const Planner = () => {
               editors={editors}
               getEditorCapacity={getEditorCapacity}
               getEditorJobCount={getEditorJobCount}
-              onAddEditor={async (editor) => {
-                try {
-                  await addEditor(editor);
-                } catch (error: any) {
-                  if (error.message === 'PLAN_LIMIT_REACHED') {
-                    setIsPremiumModalOpen(true);
-                  }
-                }
-              }}
+              onAddEditor={addEditor}
               onUpdateEditor={updateEditor}
               onDeleteEditor={deleteEditor}
               onReassignJobs={reassignEditorJobs}
+              planType={planType}
+              onUpgrade={() => setIsPremiumModalOpen(true)}
             />
           )}
         </main>
       </div>
+
+
 
       <PremiumModal isOpen={isPremiumModalOpen} onClose={() => setIsPremiumModalOpen(false)} />
       <NewJobModal

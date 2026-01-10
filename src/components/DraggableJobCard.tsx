@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import { cn } from '@/lib/utils';
 import { Clock, Trash2, FileText } from 'lucide-react';
-import { Priority, Status } from '@/hooks/usePlannerData';
+import { Priority, Status, Job } from '@/hooks/usePlannerData';
 import {
   Tooltip,
   TooltipContent,
@@ -24,15 +24,18 @@ interface DraggableJobCardProps {
   hours: number;
   priority: Priority;
   status: Status;
+  notes?: string;
   onDelete?: (id: string) => void;
+  onUpdateJob?: (id: string, updates: Partial<Job>) => void;
 }
 
-// Local state for job notes (persists during session only)
-const jobNotesStore: Record<string, string> = {};
-
-const DraggableJobCard = ({ id, index, title, clientName, hours, priority, status, onDelete }: DraggableJobCardProps) => {
-  const [note, setNote] = useState(jobNotesStore[id] || '');
+const DraggableJobCard = ({ id, index, title, clientName, hours, priority, status, notes, onDelete, onUpdateJob }: DraggableJobCardProps) => {
+  const [note, setNote] = useState(notes || '');
   const [isNoteOpen, setIsNoteOpen] = useState(false);
+
+  useEffect(() => {
+    setNote(notes || '');
+  }, [notes]);
 
   const priorityStyles = {
     low: 'border-l-success bg-success/5',
@@ -53,7 +56,12 @@ const DraggableJobCard = ({ id, index, title, clientName, hours, priority, statu
 
   const handleNoteChange = (value: string) => {
     setNote(value);
-    jobNotesStore[id] = value;
+  };
+
+  const handleNoteBlur = () => {
+    if (note !== notes) {
+      onUpdateJob?.(id, { notes: note });
+    }
   };
 
   const hasNote = note.trim().length > 0;
@@ -82,22 +90,30 @@ const DraggableJobCard = ({ id, index, title, clientName, hours, priority, statu
           )}
 
           {/* Notes Button */}
-          <Popover open={isNoteOpen} onOpenChange={setIsNoteOpen}>
+          <Popover
+            open={isNoteOpen}
+            onOpenChange={(open) => {
+              if (!open && note !== notes) {
+                onUpdateJob?.(id, { notes: note });
+              }
+              setIsNoteOpen(open);
+            }}
+          >
             <PopoverTrigger asChild>
               <button
                 onClick={(e) => e.stopPropagation()}
                 className={cn(
                   "absolute top-1 right-6 p-1 rounded transition-all",
-                  hasNote 
-                    ? "opacity-100 text-primary" 
+                  hasNote
+                    ? "opacity-100 text-primary"
                     : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
                 )}
               >
                 <FileText size={10} />
               </button>
             </PopoverTrigger>
-            <PopoverContent 
-              className="w-56 p-2" 
+            <PopoverContent
+              className="w-56 p-2"
               align="start"
               onClick={(e) => e.stopPropagation()}
             >
@@ -107,6 +123,7 @@ const DraggableJobCard = ({ id, index, title, clientName, hours, priority, statu
                   placeholder="Add notes..."
                   value={note}
                   onChange={(e) => handleNoteChange(e.target.value)}
+                  onBlur={handleNoteBlur}
                   className="text-xs min-h-[60px] resize-none"
                 />
               </div>
