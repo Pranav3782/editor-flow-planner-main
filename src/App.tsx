@@ -14,6 +14,9 @@ import { useTheme } from "@/hooks/useTheme";
 const queryClient = new QueryClient();
 
 import PaymentSuccess from "@/pages/PaymentSuccess";
+import Privacy from "@/pages/Privacy";
+import Terms from "@/pages/Terms";
+import ScrollToTop from "@/components/ScrollToTop";
 
 const App = () => {
   useTheme(); // Initialize theme globally
@@ -25,11 +28,14 @@ const App = () => {
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <ScrollToTop />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/planner" element={<Planner />} />
               <Route path="/payment-success" element={<PaymentSuccess />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
