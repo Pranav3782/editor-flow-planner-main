@@ -17,6 +17,42 @@ const DiscordIcon = ({ size = 20, className = "" }: { size?: number, className?:
   </svg>
 );
 
+const SubstackIcon = ({ size = 20, className = "" }: { size?: number, className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <rect x="4" y="2" width="16" height="4" rx="1" />
+    <path d="M4 8h16v14l-8-4-8 4V8z" />
+  </svg>
+);
+
+const LinktreeIcon = ({ size = 20, className = "" }: { size?: number, className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </svg>
+);
+
 const HeroSection = () => {
   const [email, setEmail] = useState('');
 
@@ -107,6 +143,15 @@ const HeroSection = () => {
 
           <div className="flex justify-center items-center gap-6">
             <a
+              href="https://www.instagram.com/entrext.labs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3 rounded-full bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground hover:scale-110 transition-all duration-300 backdrop-blur-sm border border-white/5"
+              aria-label="Instagram"
+            >
+              <Instagram size={20} />
+            </a>
+            <a
               href="https://discord.com/invite/ZZx3cBrx2"
               target="_blank"
               rel="noopener noreferrer"
@@ -125,13 +170,22 @@ const HeroSection = () => {
               <Linkedin size={20} />
             </a>
             <a
-              href="https://www.instagram.com/entrext.labs"
+              href="https://entrextlabs.substack.com/subscribe"
               target="_blank"
               rel="noopener noreferrer"
               className="p-3 rounded-full bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground hover:scale-110 transition-all duration-300 backdrop-blur-sm border border-white/5"
-              aria-label="Instagram"
+              aria-label="Substack"
             >
-              <Instagram size={20} />
+              <SubstackIcon size={20} />
+            </a>
+            <a
+              href="https://linktr.ee/entrext.pro"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3 rounded-full bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground hover:scale-110 transition-all duration-300 backdrop-blur-sm border border-white/5"
+              aria-label="Linktree"
+            >
+              <LinktreeIcon size={20} />
             </a>
           </div>
         </div>
